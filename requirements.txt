@@ -1,0 +1,11 @@
+# Runtime
+moomoo-api==10.12.7208      # must match the installed OpenD version (10.12.7208)
+fastapi>=0.115
+uvicorn>=0.30
+websockets>=12
+ruamel.yaml>=0.18           # round-trip YAML: keeps comments in config.yaml when the UI saves changes
+httpx>=0.27                 # news sources: moomoo news search endpoint, SEC EDGAR
+anthropic>=2.8              # optional Layer 2 news classifier (only used when switched on)
+
+# Tests
+pytest>=8

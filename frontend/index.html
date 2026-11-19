@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>行情监控台</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="nav" id="nav">
+  <div class="wrap nav-in">
+    <div class="brand">
+      <span class="brand-mark">监</span>
+      <span class="brand-name">行情监控台</span>
+      <span class="mode-tag" id="modeTag">连接中</span>
+    </div>
+    <nav class="seg" id="tabs" role="tablist" aria-label="页面">
+      <button data-tab="stocks" class="active" role="tab">股票</button>
+      <button data-tab="options" role="tab">期权</button>
+      <button data-tab="market" role="tab">市场<span class="badge" id="mktBadge" hidden></span></button>
+      <button data-tab="analysis" role="tab" hidden>个股分析</button>
+      <button data-tab="heatmap" role="tab">市场热力图</button>
+      <button data-tab="alerts" role="tab">提醒</button>
+      <button data-tab="trading" role="tab">自动交易</button>
+    </nav>
+    <div class="nav-right">
+      <button class="icon-btn nav-ic" id="btnSettings" title="设置：资讯来源、SEC 邮箱、关键词、智能分类" aria-label="设置">
+        <svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      </button>
+      <span class="conn" id="navConn"><i class="dot"></i><span>看板连接中</span></span>
+      <button class="btn-stop" id="btnStop" title="立即撤销全部挂单并关闭自动下单">
+        <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        紧急停止
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- persistent status area -->
+  <section class="panel status" id="status" aria-label="状态与额度">
+    <div class="status-grid" id="statusGrid"></div>
+    <div class="status-row alertrow" id="rightLost" hidden>
+      <div class="msg"><strong>最高行情权限已被其他终端占用</strong><span class="muted">同一账户只有一个终端能获得最高行情权限，例如手机上打开了 moomoo App。</span></div>
+      <div class="acts"><button class="btn primary" id="btnRight">重新获取最高行情权限</button></div>
+    </div>
+    <div class="status-row" id="newsRow"></div>
+    <div class="status-row" id="notifyRow" hidden>
+      <div class="msg"><span>桌面通知未开启。提醒触发时需要桌面通知和提示音。</span></div>
+      <div class="acts"><button class="btn small" id="btnNotify">开启桌面通知</button></div>
+    </div>
+    <div class="status-row" id="mockRow" hidden>
+      <div class="msg"><span class="tag dark">模拟模式</span><span class="muted">未连接 OpenD，行情为模拟数据。以下按钮用于测试界面功能。</span></div>
+      <div class="acts">
+        <button class="btn small" data-mock="lose_quote_right">模拟：行情权限被抢占</button>
+        <button class="btn small" data-mock="disconnect">模拟：OpenD 断开</button>
+        <button class="btn small" id="btnMockPrice">模拟：设置标的价格</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- stocks -->
+  <section class="view" id="view-stocks">
+    <div class="block">
+      <div class="sec-head">
+        <div><h2>股票与 ETF</h2><div class="sub">输入 moomoo 格式代码，例如 US.QQQ、US.NVDA；指数请使用对应 ETF</div></div>
+        <form class="addform" id="addStock" autocomplete="off">
+          <input class="input" name="code" placeholder="代码，例如 US.QQQ" aria-label="股票代码">
+          <button class="btn primary" type="submit">添加</button>
+        </form>
+      </div>
+      <p class="note" id="stockNote"></p>
+      <div class="panel scroll-x"><table class="grid" id="stockTable">
+        <thead><tr>
+          <th>代码</th><th>时段</th><th class="r">最新价</th><th class="r">涨跌额</th><th class="r">涨跌幅</th>
+          <th class="r">最高</th><th class="r">最低</th><th class="r">成交量</th>
+          <th class="r" title="最近一根已完成的 5 分钟 K 线收盘价">5 分钟收盘</th><th>订阅</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- options -->
+  <section class="view" id="view-options" hidden>
+    <div class="block">
+      <div class="sec-head"><div><h2>期权自选</h2><div class="sub">准备交易的合约。在期权链中点击合约旁的 + 固定到这里</div></div></div>
+      <div class="panel scroll-x"><table class="grid" id="pinTable">
+        <thead><tr>
+          <th>合约</th><th>类型</th><th class="r">行权价</th><th>到期日</th><th class="r">买价</th><th class="r">卖价</th>
+          <th class="r">中间价</th><th class="r">价差</th><th class="r">最新</th><th class="r">成交量</th><th class="r">未平仓</th>
+          <th class="r">隐含波动率</th><th class="r">Delta</th><th class="r hide-md">Gamma</th><th class="r hide-md">Theta</th><th class="r hide-md">Vega</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="block">
+      <div class="sec-head">
+        <div><h2>期权链</h2><div class="sub" id="optNote"></div></div>
+        <form class="addform" id="addUnderlying" autocomplete="off">
+          <input class="input" name="code" placeholder="标的，例如 US.QQQ" aria-label="期权标的">
+          <button class="btn primary" type="submit">添加标的</button>
+        </form>
+      </div>
+      <div id="underlyings"></div>
+      <div id="chains"></div>
+    </div>
+  </section>
+
+  <!-- market overview -->
+  <section class="view" id="view-market" hidden>
+    <div class="block">
+      <div class="sec-head">
+        <div><h2>市场概览</h2><div class="sub" id="mktSub">美股常规交易时段每 60 秒刷新；非交易时段保留上一交易时段的数据</div></div>
+        <div class="ctrls">
+          <div class="seg small" id="plateSet" role="group" aria-label="板块类型">
+            <button data-ps="INDUSTRY">行业板块</button><button data-ps="CONCEPT">概念板块</button></div>
+          <button class="btn small" id="btnMktRefresh"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>刷新</button>
+        </div>
+      </div>
+      <div class="panel"><div class="bench" id="benchStrip"></div></div>
+    </div>
+    <div class="block">
+      <div class="sec-head"><div><h2>板块涨跌</h2><div class="sub" id="cap1"></div></div></div>
+      <div class="twocol">
+        <div><div class="sec-label" id="lblGainers">涨幅最大的板块</div><div class="panel" id="gainers"></div></div>
+        <div><div class="sec-label" id="lblLosers">跌幅最大的板块</div><div class="panel" id="losers"></div></div>
+      </div>
+    </div>
+    <div class="block">
+      <div class="sec-head"><div><h2>资金流向</h2><div class="sub" id="cap2"></div></div></div>
+      <div class="twocol">
+        <div><div class="sec-label" id="lblInflow">净流入最多的板块</div><div class="panel" id="inflow"></div></div>
+        <div><div class="sec-label" id="lblOutflow">净流出最多的板块</div><div class="panel" id="outflow"></div></div>
+      </div>
+    </div>
+    <div class="block">
+      <div class="sec-head">
+        <div><h2>板块领涨</h2><div class="sub" id="cap3"></div></div>
+        <div class="ctrls">
+          <label>市值 ≥ <input class="input small num-in" type="number" min="0" step="1" id="minCap"> 亿美元</label>
+          <label>今日成交额 ≥ <input class="input small num-in" type="number" min="0" step="100" id="minDv"> 万美元</label>
+        </div>
+      </div>
+      <div class="panel scroll-x"><table class="grid" id="leaderTable">
+        <thead><tr><th>板块</th><th>领涨股</th><th class="r">涨跌幅</th><th class="r">最新价</th><th class="r">成交额</th><th>催化新闻（24 小时内）</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="block">
+      <div class="sec-head">
+        <div><h2>重要新闻</h2><div class="sub" id="cap4"></div></div>
+        <div class="ctrls">
+          <select class="input small" id="newsSymbol" aria-label="标的"><option value="">全部标的</option></select>
+          <div class="seg small" id="newsLevel" role="group" aria-label="重要性">
+            <button data-lv="高,中" class="active">高 + 中</button><button data-lv="高">仅高</button><button data-lv="">全部</button></div>
+          <select class="input small" id="newsSource" aria-label="来源"><option value="">全部来源</option></select>
+        </div>
+      </div>
+      <div class="panel" id="secEmailRow" hidden><div class="status-row alertrow" style="border-top:none">
+        <div class="msg"><strong>SEC EDGAR 需要联系邮箱</strong><span class="muted">SEC 要求自动访问时在 User-Agent 中注明名称和联系邮箱。邮箱只保存在本机配置文件中。</span></div>
+        <div class="acts"><button class="btn primary small" id="btnSecEmail">填写邮箱</button></div></div></div>
+      <div class="sec-label" style="margin-top:4px">未来 7 天财报（自选标的）</div>
+      <div class="panel" id="earnPanel"></div>
+      <div class="sec-label" style="margin-top:18px">时间线</div>
+      <div class="panel" id="newsTimeline"></div>
+    </div>
+  </section>
+
+  <!-- stock analysis -->
+  <section class="view" id="view-analysis" hidden>
+    <div class="block an-top">
+      <div class="sec-head">
+        <div><h2>个股分析</h2><div class="sub" id="anSub">行情、财务与期权链来自 moomoo OpenD；新闻由模型联网检索；交易方案由服务端代码校验</div></div>
+        <div class="an-meta" id="anMeta"></div>
+      </div>
+      <form class="an-form" id="anForm" autocomplete="off" role="search">
+        <div class="combo">
+          <input class="input" id="anInput" placeholder="代码或公司名，例如 NVDA、Nvidia" aria-label="股票代码或公司名"
+            role="combobox" aria-expanded="false" aria-controls="anList" aria-autocomplete="list" spellcheck="false">
+          <ul class="combo-list" id="anList" role="listbox" aria-label="候选股票" hidden></ul>
+        </div>
+        <button class="btn primary" type="submit" id="anGo">生成分析</button>
+      </form>
+      <div class="panel an-progress" id="anProgress" hidden aria-live="polite"></div>
+    </div>
+    <div id="anResult"></div>
+  </section>
+
+  <!-- market heatmap (TradingView official embed widget) -->
+  <section class="view" id="view-heatmap" hidden>
+    <div class="heat-head">
+      <div><h2>市场热力图</h2><div class="sub">标普 500 成分股 · 按行业分组 · 面积为市值 · 颜色为当日涨跌幅 · 数据来自 TradingView</div></div>
+      <a class="btn small" id="heatOpen" href="https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D" target="_blank" rel="noopener noreferrer">在 TradingView 中打开
+        <svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>
+    </div>
+    <div class="panel heat-box" id="heatmapHost"></div>
+  </section>
+
+  <!-- alerts -->
+  <section class="view" id="view-alerts" hidden>
+    <div class="block">
+      <div class="sec-head">
+        <div><h2>提醒规则</h2><div class="sub">条件全部满足（AND）时触发：高亮相关行、桌面通知并播放提示音。时间均为美东时间</div></div>
+        <button class="btn primary" id="btnNewRule">新建规则</button>
+      </div>
+      <div class="panel scroll-x"><table class="grid" id="ruleTable">
+        <thead><tr><th>名称</th><th>标的</th><th>条件</th><th>生效时段（美东）</th><th>触发方式</th><th>状态</th><th>下单</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="block">
+      <div class="sec-head"><div><h2>最近触发</h2></div></div>
+      <div class="panel" id="alertHistory"></div>
+    </div>
+  </section>
+
+  <!-- trading -->
+  <section class="view" id="view-trading" hidden>
+    <div class="block">
+      <div class="panel"><div class="stop-bar">
+        <div><div class="sec-label" style="margin:0 0 4px">紧急停止</div>
+          <p>立即撤销账户中全部美股挂单，并关闭自动下单。已有持仓不会被平仓，也不再自动管理。</p></div>
+        <button class="btn-stop big" id="btnStop2">紧急停止</button>
+      </div></div>
+    </div>
+    <div class="block twocol">
+      <div>
+        <div class="sec-label">自动下单</div>
+        <div class="panel" id="tradeSwitches"></div>
+      </div>
+      <div>
+        <div class="sec-label">今日（美东）</div>
+        <div class="panel" id="tradeToday"></div>
+      </div>
+    </div>
+    <div class="block">
+      <div class="sec-head"><div><h2>硬性限制</h2><div class="sub">保存在配置文件中，修改需要确认</div></div><button class="btn" id="btnLimits">修改</button></div>
+      <div class="panel" id="tradeLimits"></div>
+    </div>
+    <div class="block">
+      <div class="sec-head"><div><h2>托管持仓</h2><div class="sub">由规则自动开仓、按止损 / 止盈 / 时间止损自动平仓的持仓</div></div></div>
+      <div class="panel scroll-x"><table class="grid" id="posTable">
+        <thead><tr><th>开仓时间</th><th>规则</th><th>合约</th><th>方向</th><th class="r">数量</th><th class="r">入场价</th><th class="r">现价</th>
+          <th class="r">盈亏</th><th>环境</th><th>状态</th><th>说明</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="block">
+      <div class="sec-head"><div><h2>当日委托</h2></div></div>
+      <div class="panel scroll-x"><table class="grid" id="orderTable">
+        <thead><tr><th>时间</th><th>订单号</th><th>合约</th><th>方向</th><th class="r">数量</th><th class="r">限价</th>
+          <th class="r">已成交</th><th class="r">成交均价</th><th>状态</th><th>环境</th><th>备注</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="block">
+      <div class="sec-head"><div><h2>订单日志</h2><div class="sub" id="logPath">下单、改单、撤单与成交回报全部写入本地日志文件</div></div></div>
+      <div class="panel"><div class="log-list" id="logList"></div></div>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

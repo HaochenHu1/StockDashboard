@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets
+.env
+
+# Runtime data, order logs, caches (personal trading records)
+data/
+logs/
+*.log
+
+# Third-party skill bundles (moomoo official skills, not redistributed)
+.claude/
+*.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

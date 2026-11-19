@@ -1,0 +1,279 @@
+# moomoo monitoring dashboard - the single configuration file.
+# The dashboard rewrites this file when you change things in the UI (comments are kept).
+# Values marked "verified" were checked against moomoo API doc v10.12 / SDK 10.12.7208 on 2026-11-10.
+
+opend:
+  host: 127.0.0.1
+  port: 11111              # default OpenD API port
+  telnet_port: 22222       # used only for the request_highest_quote_right command; enable Telnet in OpenD settings
+  security_firm: FUTUINC   # broker entity of the account (moomoo US = FUTUINC); detected from get_acc_list
+  ai_type: 1               # marks the connection as an AI-agent built tool, as the official moomoo skill does
+
+server:
+  port: 8600               # the dashboard always binds to 127.0.0.1; host is not configurable on purpose
+
+# Every OpenD request goes through one sliding-window rate limiter.
+# max_calls per window_sec; null max_calls = no documented limit (calls are still counted).
+# bucket: endpoints that share a budget point to the same bucket name.
+# Queued requests are served by priority: cancels > orders > UI actions > background polling.
+rate_limiter:
+  safety_margin_sec: 0.25  # extra wait added to every window to absorb clock differences
+rate_limits:
+  # verified 60/30s, 400 codes; polling may use 54 (6 kept for order pricing / UI); the market page may use at most 30
+  get_market_snapshot: {max_calls: 60, window_sec: 30, max_codes: 400, reserve_high: 6, consumer_caps: {market: 30}}
+  get_option_chain: {max_calls: 10, window_sec: 30, max_span_days: 30}             # verified
+  get_option_expiration_date: {max_calls: 60, window_sec: 30}                      # verified
+  place_order: {max_calls: 15, window_sec: 30, min_interval_sec: 0.02}                  # verified, per acc_id
+  place_combo_order: {bucket: place_order}                                         # verified: shares place_order budget
+  modify_order: {max_calls: 20, window_sec: 30, min_interval_sec: 0.04}                 # verified, also used to cancel
+  cancel_all_order: {bucket: modify_order}                                         # doc lists it on the modify page
+  order_list_query: {max_calls: 10, window_sec: 30}                                # verified
+  deal_list_query: {max_calls: 10, window_sec: 30}
+  position_list_query: {max_calls: 10, window_sec: 30}                             # verified
+  accinfo_query: {max_calls: 10, window_sec: 30}
+  comboorder_tradinginfo_query: {max_calls: 10, window_sec: 30}
+  get_option_strategy_analysis: {max_calls: 10, window_sec: 30}
+  request_highest_quote_right: {max_calls: 10, window_sec: 60}                     # verified (OpenD telnet command)
+  get_acc_list: {max_calls: null, window_sec: 30}
+  subscribe: {max_calls: null, window_sec: 30}
+  unsubscribe: {max_calls: null, window_sec: 30}
+  query_subscription: {max_calls: null, window_sec: 30}
+  get_global_state: {max_calls: null, window_sec: 30}
+  get_user_info: {max_calls: null, window_sec: 30}
+  get_cur_kline: {max_calls: null, window_sec: 30}
+  get_order_book: {max_calls: null, window_sec: 30}
+  get_rt_ticker: {max_calls: null, window_sec: 30}
+  get_stock_quote: {max_calls: null, window_sec: 30}
+  # market overview / news (verified against doc v10.12 and live OpenD 10.12.7208 on 2026-11-11)
+  get_plate_list: {max_calls: 10, window_sec: 30}                                  # verified
+  get_plate_stock: {max_calls: 10, window_sec: 30}                                 # verified
+  get_capital_flow: {max_calls: 30, window_sec: 30, consumer_caps: {market: 24}}   # verified; stocks/ETFs only, not plates
+  get_search_news: {max_calls: 10, window_sec: 30}                                 # verified
+  get_earnings_calendar: {max_calls: 60, window_sec: 30}                           # verified; date range <= 7 days
+  get_heat_map_data: {max_calls: 60, window_sec: 30}                               # verified; not used by the dashboard
+  # 个股分析 tab (SDK 10.12.7208). get_search_quote is documented at 10 / 30 s; the F10 calls have no documented
+  # limit, so they are capped conservatively at 10 / 30 s each (one analysis uses about 8 of them)
+  get_search_quote: {max_calls: 10, window_sec: 30}
+  get_owner_plate: {max_calls: 10, window_sec: 30}
+  get_company_profile: {max_calls: 10, window_sec: 30}
+  get_financials_statements: {max_calls: 10, window_sec: 30}
+  get_valuation_detail: {max_calls: 10, window_sec: 30}
+  get_research_analyst_consensus: {max_calls: 10, window_sec: 30}
+  get_financials_earnings_price_move: {max_calls: 10, window_sec: 30}
+  get_option_volatility: {max_calls: 10, window_sec: 30}
+
+quota:
+  min_subscription_hold_sec: 60   # verified: a subscription must stay at least 1 minute before it can be cancelled
+
+stocks:
+  subscribe_session: ALL     # US session for candle / ticker subscriptions: RTH, ETH or ALL (OVERNIGHT is not allowed)
+  snapshot_refresh_sec: 5    # watchlist snapshot refresh (prices incl. pre/after/overnight); 0 disables
+  watchlist:
+    - code: US.QQQ
+      subtypes: [QUOTE, K_1M]
+    - code: US.NVDA
+      subtypes: [QUOTE, K_1M]
+    - code: US.BE
+      subtypes: [QUOTE]
+    - code: US.SPY
+      subtypes: [QUOTE]
+    - code: US.AMD
+      subtypes: [QUOTE]
+    - code: US.TQQQ
+      subtypes: []
+    - code: US.SPCX
+      subtypes: [QUOTE]
+options:
+  default_interval_sec: 5    # snapshot polling interval per expiration (default)
+  min_interval_sec: 1        # lowest interval the UI accepts
+  default_strikes_each_side: 8
+  pinned_refresh_sec: 5      # refresh interval for the options watchlist (pinned contracts)
+  subscription_subtypes: [QUOTE, ORDER_BOOK]  # QUOTE has no bid/ask, so ORDER_BOOK is needed too: 2 option quotas per chain
+  underlyings:
+    - code: US.QQQ
+      expirations: []
+    - code: US.NVDA
+      expirations: []
+    - code: US.INTC
+      expirations:
+        - date: '2026-11-20'
+          mode: subscribe
+          interval_sec: 5.0
+          strikes_each_side: 8
+  pinned: []
+
+# Alert rules. The UI rewrites this list when rules change (comments inside the list are not kept).
+alerts:
+  - id: 6ee4de48
+    name: QQQ gap fill long
+    symbol: US.QQQ
+    enabled: false
+    active_window_et: ["09:30", "10:30"]
+    conditions:
+      - type: price_in_range
+        low: 674.5
+        high: 676.0
+      - type: kline_5m_close_above
+        value: 674.0
+    trigger_once: true
+    cooldown_sec: 300.0
+    order_action:
+      enabled: false
+      type: single
+      side: BUY
+      contract:
+      quantity: 1
+      limit_price: mid
+auto_trading:
+  # Hard limits. The UI shows them; changing them in the UI requires a confirmation.
+  limits:
+    max_contracts_per_order: 1
+    max_orders_per_day: 5            # counts automatic entry orders; exits/stops are never blocked by this limit
+    max_daily_loss_usd: 200          # realized + unrealized P/L of automatic positions; reaching it turns auto ordering off
+    stop_loss_pct: 30                # close when the position loses this % of its entry premium
+    take_profit_pct: 50              # target: close when the position gains this % of its entry premium
+    time_stop_et: "15:45"            # close at this US Eastern time if the target has not been reached
+    mid_offset: 0.00                 # limit = mid + offset for BUY, mid - offset for SELL (USD per contract price)
+    entry_timeout_sec: 60            # cancel an unfilled entry order after this many seconds
+    exit_reprice_sec: 20             # cancel and re-submit an unfilled exit order at the new mid after this many seconds
+  real_acc_id:                       # live account chosen in the UI (paper account is detected automatically)
+
+mock:
+  kline_5m_seconds: 300              # length of one simulated "5 minute" candle; set e.g. 30 to test candle alerts faster
+  combo_supported: true              # simulate a broker entity that supports combo orders
+
+# 市场 page. Snapshots only (no subscription quota), lowest priority, at most half of the snapshot budget.
+market:
+  plate_set: CONCEPT                 # INDUSTRY (行业板块, 145 US plates) or CONCEPT (概念板块, 118); switchable on the page
+  benchmarks: [US.SPY, US.QQQ, US.TQQQ, US.DIA, US.SOXX]
+  min_market_cap_usd: 10000000000.0  # sector leader size filter: market cap >= 2B USD
+  min_dollar_volume_usd: 20000000.0  # and dollar volume today >= 20M USD (both editable on the page)
+  refresh_sec: 60                    # sector change, leaders, benchmark strip during regular hours
+  capital_flow_refresh_sec: 300      # capital flow cycle during regular hours
+  capital_flow_top_per_sector: 5     # a sector's flow = its top 5 size-filtered constituents by dollar volume
+  capital_flow_calls_per_cycle: 60   # codes per round (24 / 30 s for this page -> a round takes 1-2 min)
+  capital_flow_method: constituents  # constituents (sum of constituents' net inflow) or etf_proxy
+  min_flow_coverage_pct: 20          # list a sector only when its measured top 5 cover >= 20% of its eligible dollar volume
+  top_n_sectors: 5                   # rows in 涨幅最大 / 跌幅最大
+  top_n_flows: 10                    # rows in 净流入 / 净流出
+  top_n_leaders: 5                   # rows in 板块领涨
+  # US stocks only: China-themed plates (热门中概股, China's Terrific ...) are hidden, their members are treated as
+  # China-concept stocks and removed from every other sector (change recomputed from US stocks, leaders, flows)
+  us_only: true
+  exclude_codes: []                  # extra codes to exclude, e.g. [US.XYZ]
+  keep_codes: []                     # codes never treated as China-concept stocks, e.g. [US.AS]
+  china_sec_refresh_days: 7          # SEC list of companies based in mainland China / Hong Kong / Macau (Taiwan kept)
+
+# 资讯 (news timeline on the 市场 page)
+news:
+  contact_email: ""                   # SEC EDGAR requires "name + contact email" in the User-Agent; set it in the UI (设置)
+  app_name: moomoo-local-dashboard   # name part of the SEC User-Agent
+  user_agent: "moomoo-local-dashboard/1.0 (news monitor)"   # User-Agent for the moomoo news search endpoint
+  sources:
+    moomoo_search: {enabled: true, poll_interval_sec: 120, news_types: [1, 2], lang: en, size: 20}  # Source A
+    moomoo_api: {enabled: true, poll_interval_sec: 300, max_count: 20}                               # Source B
+    sec: {enabled: true, poll_interval_sec: 60, max_requests_per_sec: 5, include_form4: false, initial_lookback_days: 2}
+    earnings: {enabled: true, refresh_sec: 1800, days_ahead: 7}                                       # Source D
+  http_rate_limits:
+    moomoo_news_search: {max_calls: 20, window_sec: 60}   # no documented limit: conservative safety cap
+  extra_keywords: []                 # extra search keywords watched in addition to the watchlist symbols
+  # English company names used as the news search keyword (short tickers like BE match unrelated news);
+  # without an alias the SEC company name is used once the SEC email is set, otherwise the ticker
+  symbol_aliases:
+    US.BE: Bloom Energy
+  notify_medium: false               # also notify 中 items (高 always notifies)
+  notify_max_age_min: 120            # older backlog items are stored and shown but do not notify
+  dedup: {window_min: 30, similarity: 0.5}
+  retention_days: 30
+  mock_interval_sec: 20
+  layer2:                            # optional Claude classifier, OFF by default; key only from env ANTHROPIC_API_KEY
+    enabled: false
+    model: claude-opus-5-5           # current model ID per Anthropic docs (2026-11); claude-haiku-5-5 is the low-cost option
+    effort: low
+    daily_cap: 300
+    max_summary_chars: 500
+    fallbacks: default               # server-side refusal fallback (beta server-side-fallback-2026-07-01); set "" to disable
+  keywords:
+    high:
+      - FBI
+      - DOJ
+      - SEC investigation
+      - subpoena
+      - indictment
+      - probe
+      - export control
+      - Commerce Department
+      - Entity List
+      - recall
+      - FDA approval
+      - FDA rejection
+      - guidance cut
+      - guidance raise
+      - resigns
+      - steps down
+      - acquisition
+      - merger
+      - bankruptcy
+      - trading halt
+      - short seller report
+      - 调查
+      - 起诉
+      - 出口管制
+      - 下调指引
+      - 上调指引
+      - 辞职
+      - 收购
+      - 破产
+      - 停牌
+    medium:
+      - earnings
+      - quarterly results
+      - revenue
+      - guidance
+      - outlook
+      - downgrade
+      - upgrade
+      - price target
+      - lawsuit
+      - settlement
+      - layoffs
+      - buyback
+      - dividend
+      - partnership
+      - contract
+      - offering
+      - activist
+      - stake
+      - 财报
+      - 业绩
+      - 营收
+      - 指引
+      - 评级
+      - 目标价
+      - 诉讼
+      - 裁员
+      - 回购
+      - 分红
+      - 合作
+      - 增持
+      - 减持
+# 个股分析 tab. The Anthropic key is read only from the environment (ANTHROPIC_API_KEY, e.g. in .env); never stored here.
+stock_analysis:
+  enabled: false                     # 个股分析 tab 已关闭；改为 true 并重启看板即可恢复
+  model: claude-opus-5-5             # Claude model for the analysis (web search tool web_search_20260209)
+  effort: high                       # low / medium / high / xhigh / max
+  fallbacks: default                 # server-side refusal fallback (beta server-side-fallback-2026-07-01); "" disables
+  max_tokens: 64000                  # streamed
+  web_search_max_uses: 20            # web searches per analysis
+  max_continuations: 5               # pause_turn resumes
+  daily_cap: 50                      # analyses per US Eastern day (live mode); mock mode never calls the API
+  cache_minutes: 30                  # same symbol within 30 minutes -> cached result ("重新生成" skips the cache)
+  max_concurrent: 2
+  request_wait_sec: 240              # POST waits this long, then the page polls the job
+  # trade plan checks done in code (prompt 1.4)
+  max_option_days: 7                 # option legs must expire within 7 calendar days (US Eastern)
+  min_open_interest: 500             # contracts
+  max_spread_pct: 10                 # (ask - bid) / mid, percent
+  # option chain handed to the model: expirations within max_option_days, strikes near the money
+  chain_strike_window_pct: 20        # strikes within +-20% of the price
+  chain_max_strikes_each_side: 30
